@@ -1,19 +1,20 @@
+from main import *
 from fastapi import FastAPI
 from pydantic import BaseModel
 import asyncio
 from typing import List, Union
-from a import *
 import uvicorn
-import logging
 import json
 import torch
+import logging
+import pytz
+from datetime import datetime
 
-
-logging.basicConfig(filename="NagadLog.log",
+logging.basicConfig(filename="Unilever_Log.log",
                     filemode='w')
-logger = logging.getLogger("Nagad")
+logger = logging.getLogger("Unilever")
 logger.setLevel(logging.DEBUG)
-file_handler = logging.FileHandler("NagadLog.log")
+file_handler = logging.FileHandler("Unilever_Log.log")
 logger.addHandler(file_handler)
 total_done = 0
 total_error = 0
@@ -21,11 +22,18 @@ total_error = 0
 app = FastAPI()
 
 class Item(BaseModel):
-    url: str
-    
+    url : str
+
+def get_bd_time():
+    bd_timezone = pytz.timezone("Asia/Dhaka")
+    time_now = datetime.now(bd_timezone)
+    current_time = time_now.strftime("%I:%M:%S %p")
+    return current_time
+
+
 async def process_item(item: Item):
     try:
-        result = await detect_seq(item.url)
+        result = await mainDet(item.url)
         result = json.loads(result)
         return result
     finally:
@@ -37,46 +45,39 @@ async def process_items(items: Union[Item, List[Item]]):
     if type(items)==list:
         coroutines = [process_item(item) for item in items]
         results = await asyncio.gather(*coroutines)
-        print("multi : ",results)
     else:
         results = await process_item(items)
-        print("single : ", results)
     return results
-
-
 
 @app.get("/status")
 async def status():
     return "AI Server in running"
 
-@app.post("/nagad")
+
+
+@app.post("/unilever")
 async def create_items(items: Union[Item, List[Item]]):
     try:
-        # global total_done
-        # total_done +=1
         results = await process_items(items)
         print("Result Sent to User:", results)
         print("###################################################################################################")
         print(items)
-        print("Last Execution Time : ", get_bd_time())
-        # logger.info(f"Time:{get_bd_time()}, Execution Done and Total Successfull Execution : {total_done}")
         return results
     except Exception as e:
         global total_error
         total_error += 1
-        logger.info(f"Time:{get_bd_time()}, Execution Failed and Total Failed Execution : {total_error}, Payload:{items}")
+        logger.info(f"Time:{get_bd_time()}, Failed Execution : {total_error}, Payload:{items}")
         logger.error(str(e))
         return {"AI": f"Error: {str(e)}"}
     finally:
         global total_done
         total_done +=1
-        logger.info(f"Time:{get_bd_time()}, Execution Done and Total Successfull Execution : {total_done}, Payload:{items}")
+        logger.info(f"Time:{get_bd_time()}, Successfull Execution : {total_done}, Payload:{items}, Response : {results}")
         torch.cuda.empty_cache()
         pass
 
 if __name__ == "__main__":
     try:
-        del model
-        uvicorn.run(app, host="127.0.0.1", port=4444)
+        uvicorn.run(app, host="127.0.0.1", port=5656)
     finally:
         torch.cuda.empty_cache()
